@@ -1,6 +1,6 @@
 import React from 'react';
 import {render, unmountComponentAtNode} from 'react-dom';
-import {act as reactAct} from 'react-dom/test-utils';
+import {act} from 'react-dom/test-utils';
 import {
   Arguments,
   MaybeFunctionReturnType as ReturnType,
@@ -19,11 +19,6 @@ import {
   PropsFor,
   DebugOptions,
 } from './types';
-
-// Manually casting `act()` until @types/react is updated to include
-// the Promise types for async act introduced in version 16.9.0-alpha.0
-// https://github.com/Shopify/quilt/issues/692
-const act = reactAct as (func: () => void | Promise<void>) => Promise<void>;
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const {findCurrentFiberUsingSlowPath} = require('react-reconciler/reflection');
@@ -76,7 +71,6 @@ export class Root<Props> implements Node<Props> {
   private wrapper: TestWrapper<Props> | null = null;
   private element = document.createElement('div');
   private root: Element<Props> | null = null;
-  // private acting = false;
 
   private render: Render;
   private resolveRoot: ResolveRoot;
@@ -98,31 +92,11 @@ export class Root<Props> implements Node<Props> {
   act<T>(action: () => T, {update = true} = {}): T {
     const updateWrapper = update ? this.update.bind(this) : noop;
     let result!: T;
-
-    const afterResolve = () => {
-      updateWrapper();
-
-      return result;
-    };
-
-    const promise = act(() => {
+    act(() => {
       result = action();
-
-      // The return type of non-async `act()`, DebugPromiseLike, contains a `then` method
-      // This condition checks the returned value is an actual Promise and returns it
-      // to React’s `act()` call, otherwise we just want to return `undefined`
-      if (isPromise(result)) {
-        return (result as unknown) as Promise<void>;
-      }
-    });
-
-    if (isPromise(result)) {
       updateWrapper();
-
-      return Promise.resolve(promise).then(afterResolve) as any;
-    }
-
-    return afterResolve();
+    });
+    return result;
   }
 
   html() {
@@ -327,12 +301,6 @@ function childrenToTree(fiber: Fiber | null, root: Root<unknown>) {
   }
 
   return {children, descendants};
-}
-
-function isPromise<T>(promise: T | Promise<T>): promise is Promise<T> {
-  return (
-    promise != null && typeof promise === 'object' && 'then' in (promise as any)
-  );
 }
 
 function noop() {}
